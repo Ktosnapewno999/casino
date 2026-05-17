@@ -155,6 +155,19 @@ YAML
 info "Creating DNS route in Cloudflare"
 cloudflared tunnel route dns "$TUNNEL_NAME" "$BACKEND_DOMAIN" || true
 
+info "Copying cloudflared config for system service"
+sudo mkdir -p /etc/cloudflared
+sudo cp "$HOME/.cloudflared/$TUNNEL_ID.json" "/etc/cloudflared/$TUNNEL_ID.json"
+sudo tee /etc/cloudflared/config.yml >/dev/null <<YAML
+tunnel: $TUNNEL_ID
+credentials-file: /etc/cloudflared/$TUNNEL_ID.json
+
+ingress:
+  - hostname: $BACKEND_DOMAIN
+    service: http://localhost:$PORT
+  - service: http_status:404
+YAML
+
 info "Installing cloudflared as a system service"
 sudo cloudflared service install || true
 sudo systemctl enable --now cloudflared

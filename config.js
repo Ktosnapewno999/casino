@@ -1,1 +1,1 @@
-window.CASINO_API_URL = "";
+window.CASINO_API_URL = "https://api.fans-only.me";
