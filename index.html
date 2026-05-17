@@ -29,12 +29,29 @@
           <form class="auth-form" id="authForm">
             <label for="username">Username</label>
             <input id="username" autocomplete="username" minlength="3" required type="text">
+            <label for="email">Email</label>
+            <input id="email" autocomplete="email" type="email">
             <label for="password">Password</label>
             <input id="password" autocomplete="current-password" minlength="4" required type="password">
             <p class="auth-error" id="authError" aria-live="polite"></p>
             <div class="gate-actions">
               <button class="primary-button" id="loginBtn" type="submit">Login</button>
               <button class="secondary-button" id="registerBtn" type="button">Register</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="auth-step" id="verifyStep" hidden>
+          <p class="eyebrow">Email verification</p>
+          <h2>Check your inbox</h2>
+          <p class="gate-copy">Enter the verification code sent to your email address.</p>
+          <form class="auth-form" id="verifyForm">
+            <label for="verificationCode">Verification code</label>
+            <input id="verificationCode" autocomplete="one-time-code" inputmode="numeric" minlength="6" required type="text">
+            <p class="auth-error" id="verifyError" aria-live="polite"></p>
+            <div class="gate-actions">
+              <button class="primary-button" id="verifyBtn" type="submit">Verify</button>
+              <button class="secondary-button" id="backToLoginBtn" type="button">Back</button>
             </div>
           </form>
         </div>
@@ -240,6 +257,7 @@
     </div>
 
     <canvas id="celebrationCanvas" aria-hidden="true"></canvas>
+    <script src="config.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

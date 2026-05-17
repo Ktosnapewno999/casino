@@ -1,8 +1,9 @@
 const STARTING_BALANCE = 1000;
 const STORAGE_KEY = "casino-simulator-state-v1";
-const USERS_KEY = "casino-simulator-users-v1";
 const SESSION_KEY = "casino-simulator-session-v1";
+const API_TOKEN_KEY = "casino-simulator-api-token-v1";
 const AGE_KEY = "casino-simulator-age-ok-v1";
+const API_URL = (window.CASINO_API_URL || "").replace(/\/$/, "");
 const suits = ["♠", "♥", "♦", "♣"];
 const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const slotSymbols = ["🍒", "🍋", "◆", "★", "BAR", "7"];
@@ -68,9 +69,15 @@ const els = {
   ageExitBtn: document.querySelector("#ageExitBtn"),
   authForm: document.querySelector("#authForm"),
   username: document.querySelector("#username"),
+  email: document.querySelector("#email"),
   password: document.querySelector("#password"),
   authError: document.querySelector("#authError"),
   registerBtn: document.querySelector("#registerBtn"),
+  verifyStep: document.querySelector("#verifyStep"),
+  verifyForm: document.querySelector("#verifyForm"),
+  verificationCode: document.querySelector("#verificationCode"),
+  verifyError: document.querySelector("#verifyError"),
+  backToLoginBtn: document.querySelector("#backToLoginBtn"),
   canvas: document.querySelector("#celebrationCanvas")
 };
 
@@ -107,25 +114,42 @@ function saveState() {
   if (currentUser) localStorage.setItem(userStateKey(currentUser), JSON.stringify(state));
 }
 
-function loadUsers() {
-  try {
-    return JSON.parse(localStorage.getItem(USERS_KEY)) || {};
-  } catch (error) {
-    console.warn("Could not load users.", error);
-    return {};
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
 function encodePassword(password) {
   return btoa(unescape(encodeURIComponent(password)));
 }
 
+async function apiRequest(path, body) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Request failed.");
+  return data;
+}
+
 function showAuthError(message) {
   els.authError.textContent = message;
+}
+
+function showVerifyError(message) {
+  els.verifyError.textContent = message;
+}
+
+function showLoginStep() {
+  els.authStep.hidden = false;
+  els.verifyStep.hidden = true;
+  showAuthError("");
+  showVerifyError("");
+}
+
+function showVerifyStep() {
+  els.authStep.hidden = true;
+  els.verifyStep.hidden = false;
+  showAuthError("");
+  showVerifyError("");
+  setTimeout(() => els.verificationCode.focus(), 50);
 }
 
 function openGate() {
@@ -133,7 +157,7 @@ function openGate() {
   document.body.classList.add("locked");
   if (localStorage.getItem(AGE_KEY) === "yes") {
     els.ageStep.hidden = true;
-    els.authStep.hidden = false;
+    showLoginStep();
     setTimeout(() => els.username.focus(), 50);
   }
 }
@@ -156,6 +180,7 @@ function startSession(username) {
 
 function logout() {
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(API_TOKEN_KEY);
   currentUser = null;
   state = createDefaultState();
   els.userPill.hidden = true;
@@ -165,11 +190,22 @@ function logout() {
   render();
 }
 
-function loginUser() {
+async function loginUser() {
   const username = els.username.value.trim();
   const password = els.password.value;
-  const users = loadUsers();
 
+  if (API_URL) {
+    try {
+      const data = await apiRequest("/api/login", { username, password });
+      localStorage.setItem(API_TOKEN_KEY, data.token);
+      startSession(data.user.username);
+    } catch (error) {
+      showAuthError(error.message);
+    }
+    return;
+  }
+
+  const users = JSON.parse(localStorage.getItem("casino-simulator-users-v1") || "{}");
   if (!users[username] || users[username].password !== encodePassword(password)) {
     showAuthError("Wrong username or password.");
     return;
@@ -177,10 +213,22 @@ function loginUser() {
   startSession(username);
 }
 
-function registerUser() {
+async function registerUser() {
   const username = els.username.value.trim();
+  const email = els.email.value.trim();
   const password = els.password.value;
-  const users = loadUsers();
+
+  if (API_URL) {
+    try {
+      await apiRequest("/api/register", { username, email, password });
+      showVerifyStep();
+    } catch (error) {
+      showAuthError(error.message);
+    }
+    return;
+  }
+
+  const users = JSON.parse(localStorage.getItem("casino-simulator-users-v1") || "{}");
 
   if (username.length < 3 || password.length < 4) {
     showAuthError("Use at least 3 characters for username and 4 for password.");
@@ -191,8 +239,26 @@ function registerUser() {
     return;
   }
   users[username] = { password: encodePassword(password), createdAt: new Date().toISOString() };
-  saveUsers(users);
+  localStorage.setItem("casino-simulator-users-v1", JSON.stringify(users));
   startSession(username);
+}
+
+async function verifyEmail() {
+  if (!API_URL) {
+    showVerifyError("Email verification needs the test backend.");
+    return;
+  }
+
+  try {
+    await apiRequest("/api/verify-email", {
+      email: els.email.value.trim(),
+      code: els.verificationCode.value.trim()
+    });
+    showLoginStep();
+    showAuthError("Email verified. You can log in now.");
+  } catch (error) {
+    showVerifyError(error.message);
+  }
 }
 
 function money(value) {
@@ -822,7 +888,7 @@ els.pokerDrawBtn.addEventListener("click", drawPoker);
 els.ageConfirmBtn.addEventListener("click", () => {
   localStorage.setItem(AGE_KEY, "yes");
   els.ageStep.hidden = true;
-  els.authStep.hidden = false;
+  showLoginStep();
   els.username.focus();
 });
 els.ageExitBtn.addEventListener("click", () => {
@@ -833,6 +899,11 @@ els.authForm.addEventListener("submit", (event) => {
   loginUser();
 });
 els.registerBtn.addEventListener("click", registerUser);
+els.verifyForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  verifyEmail();
+});
+els.backToLoginBtn.addEventListener("click", showLoginStep);
 window.addEventListener("resize", () => {
   els.canvas.width = window.innerWidth;
   els.canvas.height = window.innerHeight;
@@ -840,7 +911,7 @@ window.addEventListener("resize", () => {
 
 els.rouletteNumber.disabled = true;
 const savedUser = localStorage.getItem(SESSION_KEY);
-if (savedUser && loadUsers()[savedUser] && localStorage.getItem(AGE_KEY) === "yes") {
+if (savedUser && localStorage.getItem(AGE_KEY) === "yes") {
   startSession(savedUser);
 } else {
   openGate();
